@@ -761,7 +761,7 @@ function paintLogos(){var s=function(id,src){var el=document.getElementById(id);
 </script>
 
 <!-- LOGIN -->
-<div class="login-screen" id="loginScreen">
+<div class="login-screen" id="loginScreen" style="display:none">
   <div class="login-inner">
     <div class="weld-seam"></div>
     <div class="weld-seam bottom"></div>
@@ -1007,7 +1007,11 @@ function paintLogos(){var s=function(id,src){var el=document.getElementById(id);
 const SUPABASE_URL='https://kdorepgtvgwumdggjzqm.supabase.co';
 const SUPABASE_KEY='sb_publishable_8A4Lgek4MyLLl4QUsstqGw_vFFCgkwN';
 const EMAIL_FROM='stephen@send.syntechrec.online'; // verified Resend domain
-const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+// Foynes ATS notification recipients — updates/copies go to these addresses
+const NOTIFY_RECIPIENTS=['stephen@syntechrecruitment.co.uk','brendan.oconnor@foynesengineering.ie'];
+// Default identity when login is bypassed
+const DEFAULT_ME={id:'00000000-0000-0000-0000-000000000001',full_name:'Steve Brauner',title:'Director',email:'stephen@syntechrecruitment.co.uk'};
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{db:{schema:'foynes_ats'}});
 
 const STAGES=[
   {id:'submitted',name:'Submitted',color:'#2563eb'},
@@ -1070,12 +1074,8 @@ async function doLogout(){await sb.auth.signOut();location.reload();}
 
 async function boot(){
   document.getElementById('loader').classList.remove('hide');
-  const {data:{user}}=await sb.auth.getUser();
-  if(!user){document.getElementById('loader').classList.add('hide');return;}
-  // recruiter profile
-  const {data:rec}=await sb.from('recruiters').select('*').eq('id',user.id).single();
-  ME=rec||{full_name:user.email,title:'Recruiter',email:user.email};
-  ME.id=user.id;
+  // LOGIN BYPASSED — open straight to the app with a default identity
+  ME={...DEFAULT_ME};
   document.getElementById('meName').textContent=ME.full_name;
   document.getElementById('meTitle').textContent=ME.title||'Recruiter';
   document.getElementById('meAv').textContent=ini(ME.full_name);
@@ -1499,7 +1499,7 @@ function renderTab(){
     body.innerHTML='<div class="sec-t">Activity &amp; audit trail</div><div id="activityList" class="timeline"><div style="color:var(--muted);font-size:12.5px;padding:8px 0">Loading\u2026</div></div>';
     loadActivity(c.id);
   } else if(curTab==='email'){
-    body.innerHTML='<div class="email-field"><label>To</label><input id="em-to" value="'+(c.email||'')+'"></div><div class="email-field"><label>From</label><input value="'+EMAIL_FROM+'" readonly style="color:var(--muted)"></div><div class="email-field"><label>Subject</label><input id="em-sub" placeholder="Your application to Foynes Engineering"></div><textarea class="email-body" id="em-body" placeholder="Write your email\u2026"></textarea><div class="sec-t">Templates</div><div class="tmpl-row">'+Object.keys(EMAIL_TMPL).map(k=>'<button class="btn out sm" onclick="loadTmpl(\''+k+'\')">'+k+'</button>').join('')+'</div><div style="display:flex;gap:10px;margin-top:20px"><button class="btn" style="flex:1" onclick="sendEmail()"><svg fill="none" viewBox="0 0 24 24" stroke="#fff"><path d="m22 2-7 20-4-9-9-4 20-7z"/></svg>Send Email</button></div>';
+    body.innerHTML='<div class="email-field"><label>To</label><input id="em-to" value="'+(c.email||'brendan.oconnor@foynesengineering.ie')+'"></div><div class="email-field"><label>From</label><input value="'+EMAIL_FROM+'" readonly style="color:var(--muted)"></div><div class="email-field"><label>Subject</label><input id="em-sub" placeholder="Your application to Foynes Engineering"></div><textarea class="email-body" id="em-body" placeholder="Write your email\u2026"></textarea><div class="sec-t">Templates</div><div class="tmpl-row">'+Object.keys(EMAIL_TMPL).map(k=>'<button class="btn out sm" onclick="loadTmpl(\''+k+'\')">'+k+'</button>').join('')+'</div><div style="display:flex;gap:10px;margin-top:20px"><button class="btn" style="flex:1" onclick="sendEmail()"><svg fill="none" viewBox="0 0 24 24" stroke="#fff"><path d="m22 2-7 20-4-9-9-4 20-7z"/></svg>Send Email</button></div>';
   }
 }
 const VERDICTS=[['strong_hire','Strong hire','#128a4a'],['hire','Hire','#1e6fb8'],['maybe','Maybe','#e08a1e'],['no_hire','No hire','#e63530']];
@@ -1754,7 +1754,7 @@ async function uploadDoc(inp){
   if(f.size>5*1048576){toast('Too large','Max 5MB');return;}
   document.getElementById('cvdropTxt').innerHTML='Uploading&hellip;';
   const path=c.id+'/'+Date.now()+'_'+f.name;
-  const {error}=await sb.storage.from('cvs').upload(path,f);
+  const {error}=await sb.storage.from('foynes-cvs').upload(path,f);
   if(error){toast('Upload failed',error.message);renderTab();return;}
   const {data}=await sb.from('documents').insert({candidate_id:c.id,file_name:f.name,storage_path:path,doc_type:f.name.endsWith('.pdf')?'pdf':'doc',size_bytes:f.size}).select().single();
   c.docs.push({name:f.name,type:f.name.endsWith('.pdf')?'pdf':'doc',size:(f.size/1048576).toFixed(1)+' MB',path,id:data?data.id:null});
@@ -1762,7 +1762,7 @@ async function uploadDoc(inp){
 }
 async function downloadDoc(path,name){
   if(!path){toast('Unavailable','No file stored');return;}
-  const {data,error}=await sb.storage.from('cvs').createSignedUrl(path,60);
+  const {data,error}=await sb.storage.from('foynes-cvs').createSignedUrl(path,60);
   if(error){toast('Error',error.message);return;}
   window.open(data.signedUrl,'_blank');
 }
@@ -1772,7 +1772,7 @@ async function viewCV(id){
   const docs=c.docs||[];
   let cv=docs.find(d=>/cv|resume|curriculum/i.test(d.name||''))||docs[0];
   if(cv&&cv.path){
-    const {data,error}=await sb.storage.from('cvs').createSignedUrl(cv.path,60);
+    const {data,error}=await sb.storage.from('foynes-cvs').createSignedUrl(cv.path,60);
     if(error){toast('Error',error.message);return;}
     window.open(data.signedUrl,'_blank');
     return;
@@ -1889,7 +1889,7 @@ async function sendEmail(){
   const c=curCand;
   toast('Sending\u2026','Contacting mail server');
   try{
-    const {data,error}=await sb.functions.invoke('send-email',{body:{to,subject:sub,text:body,candidate_id:c.id}});
+    const {data,error}=await sb.functions.invoke('send-email',{body:{to,cc:NOTIFY_RECIPIENTS,subject:sub,text:body,candidate_id:c.id}});
     if(error||(data&&data.error)){throw new Error((data&&data.error)||error.message);}
     await sb.from('messages').insert({candidate_id:c.id,sender:'system',body:'\ud83d\udce7 Email sent: "'+sub+'"',is_read:true});
     c.msgs.push({who:'sys',txt:'\ud83d\udce7 Email sent: "'+sub+'"',t:'Today'});
@@ -2578,7 +2578,7 @@ async function saveCandidate(id){
     if(data){
       if(pendingCV){
         const f=pendingCV;const path=data.id+'/'+Date.now()+'_'+f.name;
-        const {error:upErr}=await sb.storage.from('cvs').upload(path,f);
+        const {error:upErr}=await sb.storage.from('foynes-cvs').upload(path,f);
         if(!upErr){await sb.from('documents').insert({candidate_id:data.id,file_name:f.name,storage_path:path,doc_type:f.name.toLowerCase().endsWith('.pdf')?'pdf':'doc',size_bytes:f.size});}
       }
       if(!window.__specMode)await sb.from('messages').insert({candidate_id:data.id,sender:'system',body:'Application received for '+(role?role.title:'role'),is_read:true});
@@ -2626,7 +2626,7 @@ function toast(t,m){const el=document.getElementById('toast');
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeDrawer();modalClose();}});
 
 /* ============ INIT ============ */
-(async()=>{const {data:{session}}=await sb.auth.getSession();if(session)await boot();})();
+(async()=>{await boot();})(); // login bypassed — always boot
 </script>
 </body>
 </html>
