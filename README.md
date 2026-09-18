@@ -156,3 +156,4 @@ Alternatively, set a temporary password directly:
 - Candidate availability calendar
 - Offer letter generation
 - Mobile-responsive improvements
+
