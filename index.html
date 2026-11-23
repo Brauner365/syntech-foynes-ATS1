@@ -1028,6 +1028,9 @@ const AV=['#2563eb','#0d9488','#7c3aed','#f59e0b','#ec4899','#16a34a','#f97316']
 const SLA={submitted:2,reviewing:3,requested:3,interview:5,feedback:1,offer:5};
 let ROLES=[],SITES=[],CANDIDATES=[],ME=null,TEAMMSGS=[];
 
+// right_to_work is boolean in the DB: true=yes, false=no, null=pending
+function rtwStr(v){if(v===true)return 'yes';if(v===false)return 'no';if(v==null||v==='')return 'pending';return String(v).toLowerCase();}
+function rtwBool(v){return v==='yes'?true:v==='no'?false:null;}
 function rand(a){return a[Math.floor(Math.random()*a.length)]}
 function ini(n){return n.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}
 function setRibbon(id,v){var el=document.getElementById(id);if(el)el.textContent=v;}
@@ -1389,7 +1392,7 @@ function renderCandTable(){
   document.getElementById('candCount').textContent=list.length+' candidates · '+withCV+' with CV · '+reviewed+' reviewed by client';
   document.getElementById('candBody').innerHTML=list.map(c=>{
     const hasCV=c.cv_added||(c.docs&&c.docs.length);
-    const rtw=(c.right_to_work||'yes').toLowerCase();
+    const rtw=rtwStr(c.right_to_work);
     const rtwBadge=rtw==='yes'?'<span class="rtw yes">YES</span>':rtw==='no'?'<span class="rtw no">NO</span>':'<span class="rtw pend">PENDING</span>';
     const cvBtn=hasCV?'<button class="cvbtn" onclick="event.stopPropagation();viewCV(\''+c.id+'\')">View CV \u2192</button>':'<span class="cv-none">\u2014</span>';
     return '<tr><td onclick="openCand(\''+c.id+'\')" style="cursor:pointer"><div style="font-weight:700;color:var(--ink)">'+c.name+'</div></td>'
@@ -1423,7 +1426,7 @@ function renderSpec(){
   if(!list.length){el.innerHTML='<div class="empty-hint"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><p>No spec CVs yet. Add strong local candidates you\u2019d like to put in front of the client \u2014 even when there\u2019s no matching open role.</p></div>';return;}
   el.innerHTML='<div class="spec-grid">'+list.map(c=>{
     const hasCV=c.cv_added||(c.docs&&c.docs.length);
-    const rtw=(c.right_to_work||'yes').toLowerCase();
+    const rtw=rtwStr(c.right_to_work);
     const react=c.spec_reaction;
     let reactBlock;
     if(react==='interested') reactBlock='<div class="spec-react ok"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Client interested</div>';
@@ -2504,7 +2507,7 @@ function openCandidateModal(id,spec){
   pendingCV=null;window.__specMode=!!spec&&!id;
   const c=id?CANDIDATES.find(x=>x.id===id):null;
   const roleOpts='<option value="">— Select role —</option>'+ROLES.map(r=>'<option value="'+r.id+'" '+(c&&c.role_id===r.id?'selected':'')+'>'+r.title+'</option>').join('');
-  const rtwv=(c&&c.right_to_work)||'yes';
+  const rtwv=c?rtwStr(c.right_to_work):'yes';
   const rtwOpts=[['yes','Yes — confirmed'],['pending','Pending / to verify'],['no','No']].map(o=>'<option value="'+o[0]+'" '+(rtwv===o[0]?'selected':'')+'>'+o[1]+'</option>').join('');
   const nm=c?c.name.trim().split(' '):['',''];const first=nm.slice(0,-1).join(' ')||nm[0]||'';const last=nm.length>1?nm[nm.length-1]:'';
   const html='<div class="modal-hd"><h3>'+(c?'Edit Candidate':(window.__specMode?'Add Spec CV':'Add Candidate'))+'</h3><button class="close" onclick="modalClose()">\u2715</button></div><div class="modal-bd">'
@@ -2560,7 +2563,7 @@ async function saveCandidate(id){
     name,email:email||null,
     phone:phone||null,
     nationality:document.getElementById('c-nat').value.trim()||null,
-    right_to_work:document.getElementById('c-rtw').value,
+    right_to_work:rtwBool(document.getElementById('c-rtw').value),
     role_id:roleId||null,site_id:role?role.site_id:(SITES[0]?SITES[0].id:null),
     trade:document.getElementById('c-trade').value.trim()||null,
     location:document.getElementById('c-loc').value.trim()||null,
